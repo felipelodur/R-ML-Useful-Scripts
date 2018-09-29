@@ -1,0 +1,193 @@
+---
+title: 'Validation Clustering'
+subtitle: Felipe Lodur
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: united
+    toc: yes
+---
+
+## Hierarchical clustering
+
+Complete Hierarchical:
+
+```{r}
+# Aglomerative
+
+# normalizing iris
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x))) }
+
+iris_norm <- as.data.frame(lapply(iris[,1:4], normalize))
+
+# using hierarchical clustering on iris (default complete link)
+clusters <- hclust(dist(iris[, 1:4]))
+plot(clusters,hang=-1)
+```
+
+Single Hierarchical:
+
+```{r}
+# cutting three clusters
+clusterCut <- cutree(clusters, 3)
+# comparing to the known labels
+table(iris$Species,clusterCut )
+# using hierarchical single-linkage clustering on iris 
+clusters <- hclust(dist(iris[, 1:4]),method="single")
+plot(clusters,hang=-1)
+rect.hclust(clusters, k=3, border="red")
+```
+
+Average Hierarchical:
+
+```{r}
+# cutting three clusters
+clusterCut <- cutree(clusters, 3)
+# comparing to the known labels
+table(iris$Species,clusterCut )
+# using hierarchical average-linkage clustering on iris 
+clusters <- hclust(dist(iris[, 1:4]),method="average")
+plot(clusters,hang=-1)
+rect.hclust(clusters, k=3, border="red")
+```
+
+
+## Divisive
+```{r}
+library(cluster)
+
+hc4 <- diana(iris_norm)
+pltree(hc4, cex = 0.6, hang = -1, main = "Dendrogram of diana")
+rect.hclust(clusters, k=3, border="red")
+clusterCut <- cutree(hc4, 3)
+table(iris$Species,clusterCut )
+```
+
+Test it with mlbenches:
+
+```{r}
+library(mlbench)
+
+# two normals
+data <- mlbench.2dnormals(1000,sd=0.5)
+plot(data)
+
+data_norm <- as.data.frame(lapply(as.data.frame(data$x[,1:2]), normalize))
+
+res <- hclust(dist(data_norm),method="single") # nstart tries different initializations and finds the one with lowest within variance
+plot(res,hang=-1)
+
+# cutting two clusters
+clusterCut <- cutree(res, 2)
+rect.hclust(res, k=2, border="red")
+
+plot(data_norm[,1:2],col=clusterCut)
+# comparing to the known labels
+table(data$classes,clusterCut)
+```
+
+## Validation measures clustering
+
+```{r}
+library("clValid")
+library(mlbench)
+
+# two normals
+data <- mlbench.2dnormals(1000,sd=0.5)
+plot(data)
+
+df <- scale(data$x[,1:2])
+
+# comparing hierarchical and kmeans with internal validation indexes
+clmethods <- c("hierarchical","kmeans")
+intern <- clValid(df, nClust = 2:6, 
+                  clMethods = clmethods, validation = "internal",method="single")
+summary(intern)
+
+# hierarchical
+res <- hclust(dist(df),method="single") # nstart tries different initializations and finds the one with lowest within variance
+# cutting four clusters
+clusterCut <- cutree(res, 2)
+plot(df[,1:2],col=clusterCut)
+# comparing to the known labels
+table(data$classes,clusterCut)
+
+# kmeans
+res <- kmeans(df,centers =2,nstart = 20) # nstart tries different initializations and finds the one with lowest within variance
+plot(df[,1:2],col=res$cluster)
+table(data$classes,res$cluster)
+```
+
+Mlbench Testing:
+
+```{r}
+# smiley
+data <- mlbench.smiley()
+plot(data)
+
+df <- scale(data$x[,1:2])
+
+# comparing hierarchical and kmeans with internal validation indexes
+clmethods <- c("hierarchical","kmeans")
+intern <- clValid(df, nClust = 2:6, 
+                  clMethods = clmethods, validation = "internal",method="single")
+
+summary(intern)
+
+# hierarchical
+res <- hclust(dist(df),method="single") 
+# cutting four clusters
+clusterCut <- cutree(res, 4)
+plot(df[,1:2],col=clusterCut)
+# comparing to the known labels
+table(data$classes,clusterCut)
+
+# kmeans
+res <- kmeans(df,centers =4,nstart = 20) # nstart tries different initializations and finds the one with lowest within variance
+plot(df[,1:2],col=res$cluster)
+table(data$classes,res$cluster)
+```
+
+## FPC
+
+```{r}
+library("fpc")
+
+data <- iris[,1:4]
+df <- scale(data)
+
+# k-means
+res <- kmeans(df,centers =3,nstart = 20) 
+species <- as.numeric(iris$Species)
+clust_stats <- cluster.stats(d = dist(df), species, res$cluster)
+plot(df[,3:4],col=res$cluster)
+table(iris$Species,res$cluster)
+# Corrected Rand index
+clust_stats$corrected.rand
+
+# hierarchical
+res <- hclust(dist(df),method="single") 
+# cutting four clusters
+clusterCut <- cutree(res, 3)
+plot(df[,3:4],col=clusterCut)
+# comparing to the known labels
+table(iris$Species,clusterCut)
+clust_stats <- cluster.stats(d = dist(df), species, clusterCut)
+# Corrected Rand index
+clust_stats$corrected.rand
+```
+
+## wss and silhouette
+
+```{r}
+library("factoextra")
+
+# can change the clustering algorithm in FUN (ex kmeans)
+fviz_nbclust(df, FUN = hcut, method = "wss")+geom_vline(xintercept = 3, linetype = 2)
+fviz_nbclust(df, FUN = hcut, method = "silhouette")
+gap_stat <- clusGap(df, FUN = hcut, nstart = 25, K.max = 10, B = 50)
+fviz_gap_stat(gap_stat)
+```
+
