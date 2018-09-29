@@ -1,0 +1,145 @@
+---
+title: 'Model Evaluation'
+subtitle: Felipe Lodur
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: united
+    toc: yes
+---
+
+## Data Separation
+
+Holdout
+
+```{r}
+trainingRowIndex <- sample(1:nrow(iris), 0.8*nrow(iris))  # row indices for training data
+trainingData <- iris[trainingRowIndex, ]  # model training data
+testData  <- iris[-trainingRowIndex, ] 
+```
+
+K-folds Cross-validation
+
+```{r}
+library("caret")
+
+folds <- createFolds(iris$Species, k = 10, list = FALSE)
+
+# Then get train/test folds
+train1 <- iris[folds!=1,]
+test1 <- iris[folds == 1,]
+```
+
+## Error metrics for classification
+
+```{r}
+library(class)
+
+# Part of iris data, two features just for easing plots, and two classes
+irisPart <- subset(iris, select = Petal.Length:Species)
+irisPart <- subset(irisPart,Species != "setosa")
+irisPart <- droplevels(irisPart)
+
+# 1nn with irisPart
+knn1 <- knn.cv(irisPart[,1:2], irisPart$Species, k = 1)
+conf <- table(irisPart$Species,knn1)
+
+# Accuracy
+ac = sum(diag(conf))/sum(conf)
+
+# Error Rate
+er = 1.0 - ac
+
+# Precision
+prec = conf[1,1]/sum(conf[,1])
+
+# Recall = sensibility = VP / VP + FN
+sensibility = conf[1,1] / sum(conf[1,])
+sensibility
+
+# Specificity = VN / FP + VN
+specificity = conf[2,1] / sum(conf[2,])
+
+# F1 = (2 * recall * precision) / (recall + precision)
+F1 = (2*sensibility*prec)/(sensibility+prec)
+```
+
+
+## ROC curves
+
+```{r}
+library(ROCR)
+library(nnet)
+
+# fitting a multinomial linear model to the data
+model <- multinom(Species~.,irisPart)
+
+# predicting on the same data (in practice, you should use test data)
+p <- predict(model,irisPart)
+
+# confusion matrix using a threshold cut of 0.5
+table(irisPart$Species,p)
+
+# now taking the probabilities of the predictions
+pred <- predict(model,irisPart,type="prob")
+
+# getting the ROC curve
+pred2 <- prediction(pred,irisPart$Species)
+roc <- performance(pred2,"tpr","fpr")
+plot(roc)
+abline(a=0,b=1)
+
+# computing the AUC value
+auc <- performance(pred2,"auc")
+auc <- unlist(slot(auc,"y.values"))
+auc
+```
+
+## Error metrics for Regression
+
+```{r}
+# using feature 1 to predict feature 2 (just as an example)
+plot(irisPart[,1],irisPart[,2])
+
+# trying a linear regression
+# dividing the dataset into training and testing sets
+trainingRowIndex <- sample(1:nrow(irisPart), 0.8*nrow(irisPart))  # row indices for training data
+trainingData <- irisPart[trainingRowIndex, ]  # model training data
+testData  <- irisPart[-trainingRowIndex, ] 
+linear <- lm(trainingData[,2]~trainingData[,1])
+pred <- predict(linear, data = testData[,1])
+
+# mse and nmse
+mse <- mean((testData[,2]-pred)^2)
+nmse <- sum((testData[,2] - pred)^2) / sum(abs(testData[,2] - mean(testData[,2]))^2)
+```
+
+## Statistical Tests
+
+Friedman test looks for statistical differences in treatments across multiple attempts.
+
+```{r}
+library(scmamp)
+
+if (!require("devtools")) {
+  install.packages("devtools")
+}
+
+devtools::install_github("b0rxa/scmamp")
+
+data(data_gh_2008)
+View(data.gh.2008)
+
+f <- friedmanTest(data.gh.2008)
+
+if (f$p.value < 0.05){
+    test <- nemenyiTest (data.gh.2008, alpha=0.05)   
+    plotCD (data.gh.2008, alpha=0.05, cex=1.25)
+    test
+    View(test$diff.matrix)
+    View(abs(test$diff.matrix) > test$statistic)
+}
+```
+
+
