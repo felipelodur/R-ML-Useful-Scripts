@@ -1,0 +1,239 @@
+---
+title: "Pre-Processing"
+subtitle: "Felipe Lodur"
+output:
+  html_document:
+    toc: true
+    theme: united
+---
+
+## Unbalanced Data
+
+Original Iris data:
+
+```{r}
+library(ggplot2)
+
+myplot <- function(d){
+  ggplot(data=d, aes(x = Petal.Length, y = Petal.Width)) +
+    geom_point(aes(color=Species, shape=Species)) +
+    xlab("Petal Length") + 
+    ylab("Petal Width") +
+    ggtitle("Petal Length vs Width") 
+}
+
+# Part of iris data, two features just for easing plots, and two classes
+irisPart <- subset(iris, select = Petal.Length:Species)
+irisPart <- subset(irisPart,Species != "setosa")
+irisPart <- droplevels(irisPart)
+
+# Plotting
+myplot(irisPart)
+```
+
+Let's make it unbalanced! 
+
+```{r}
+set.seed(42)
+# making unbalanced version
+irisUmb <- rbind(irisPart[sample(which(irisPart$Species == "versicolor"),10 ),], irisPart[which(irisPart$Species == "virginica"),])
+
+# Plotting
+myplot(irisUmb)
+```
+
+Let's apply kNN to see how it behaves with balanced versus unbalanced data.
+
+```{r}
+library(class)
+
+# 1nn with irisPart
+knn1 <- knn.cv(irisPart[,1:2], irisPart$Species, k = 1)
+table(irisPart$Species, knn1)
+
+# 1nn with iris3
+knn2 <- knn.cv(irisUmb[,1:2], irisUmb$Species, k = 1)
+table(irisUmb$Species,knn2)
+```
+
+## Balancing Data
+
+Undersampling the majority class:
+
+```{r}
+library(unbalanced)
+
+# the class must be a binary factor where the majority class is coded as 0 and the minority as 1
+levels(irisUmb$Species)[levels(irisUmb$Species)=="virginica"] <- "0"
+levels(irisUmb$Species)[levels(irisUmb$Species)=="versicolor"] <- "1"
+output<-irisUmb$Species
+input<-irisUmb[ ,-ncol(irisUmb)]
+
+balance <- function(input,output,typ){
+  data <- ubBalance(X= input, Y=output, type=typ, verbose=TRUE)
+  balancedData <- cbind(data$X,data$Y)
+  names(balancedData)[3] <- "Species"
+  return(balancedData)
+}
+
+#balance the dataset with undersampling
+balanced1<-balance(input,output,"ubUnder")
+dim(balanced1)
+myplot(balanced1)
+```
+
+Using SMOTE (Synthetic Minority Over-sampling Technique):
+
+```{r}
+# balance dataset with SMOTE (creates new points in the minority class)
+balanced2<-balance(input,output,"ubSMOTE")
+dim(balanced2)
+myplot(balanced2)
+```
+
+## Replacing Missing Values
+
+Replacing Missing:
+
+```{r}
+# Taking irisPart, which has reduced numbers of features and classes for better visualization
+irisM <- irisPart
+
+# taking iris2 and replacing **two** data values by unknown
+inds <- sample(1:100, 2, replace=F)
+irisM[inds,]
+
+irisM$Petal.Length[inds] <- NA
+```
+
+```{r}
+# replacing values by average
+irisM$Petal.Length[is.na(irisM$Petal.Length)] <- mean(irisM$Petal.Length, na.rm = TRUE)
+irisM[inds,]
+```
+
+Also, it's possible to take the class average. However, this technique should be used wisely, since you should not replace a missing value on a test set (since you don't know the class average). In cases where there are missing values in the test set, you can either take the whole average or take the average segmented by a categorical feature.
+
+```{r}
+tapply(irisM$Petal.Length, irisM$Species, mean)
+```
+
+Other possible statistic metrics can be used instead of the mean (e.g. median/mode)
+
+## Noise Filtering
+
+Applying ENN (Edited-Nearest-Neighbors). It is a Similarity-based filter for removing label noise.
+
+```{r}
+library(NoiseFiltersR)
+
+out <- ENN(Species~., data = irisPart, k = 3)
+summary(out)
+```
+
+```{r}
+# highlighted points are those removed by ENN
+ggplot(data=irisPart, aes(x = Petal.Length, y = Petal.Width)) +
+  geom_point(aes(color=Species, shape=Species)) +
+  xlab("Petal Length") + 
+  ylab("Petal Width") +
+  ggtitle("Petal Length vs Width") +
+  geom_point(data=irisPart[out$remIdx, ], aes(x = Petal.Length, y = Petal.Width), colour="black", size=5)
+```
+
+## Data Transformation
+
+One-hot-encoding:
+
+```{r}
+library(dummies)
+
+df <- dummy(iris$Species)
+```
+
+Discretization: Using some different break-levels.
+
+```{r}
+# data discretization of a particular feature (Petal Width)
+x <- iris[,4]
+hist(x, breaks=20, main="Equal Interval length") # breaking into 20 beans
+```
+
+```{r}
+hist(x, breaks=5, main="Equal Interval length") # breaking into 20 beans
+```
+
+```{r}
+hist(x, breaks=50, main="Equal Interval length") # breaking into 20 beans
+```
+
+Chi-squared Discretization
+
+```{r}
+library(discretization)
+
+disc <- chi2(iris,0.5,0.05)
+disc$cutp
+```
+
+Normalization (MinMaxScaler equivalent) and Standardization (Mean = 0 and unit variance)
+
+```{r}
+# Class removal
+iris2 = iris[-ncol(iris)]
+
+# Normalization
+doNorm <- function(x) {(x - min(x))/(max(x)-min(x))}
+iris.normalized <- as.data.frame(lapply(iris2, doNorm))
+summary(iris.normalized)
+
+# Standardization 
+iris.scaled <- data.frame(scale(iris2))
+summary(iris.scaled)
+```
+
+Dimensionality Reduction (PCA - Principal Component Analysis):
+
+```{r}
+log.ir <- log(iris[, 1:4])
+ir.species <- iris[, 5]
+
+# apply PCA - scale. = TRUE is highly advisable, but default is FALSE. 
+ir.pca <- prcomp(log.ir, center = TRUE, scale. = TRUE)
+print(ir.pca$rotation)
+summary(ir.pca)
+
+# plotting data with less features
+pca <- as.data.frame(cbind(ir.pca$x[,1],ir.pca$x[,2]))
+pca <- cbind(pca,iris$Species)
+names(pca)[3] <- "Species"
+ggplot(data=pca, aes(x = pca$V1, y = pca$V2)) +
+  geom_point(aes(color=pca$Species, shape=pca$Species)) +
+  xlab("PC1") + 
+  ylab("PC2") +
+  ggtitle("PC1 vc PC2")
+```
+
+Feature Selection: Using J48 tree to select instances
+(Backward search: Full variables and removing to assess impact)
+(Forward search: No variables and adding to assess impact)
+
+```{r}
+library(FSelector)
+library(RWeka)
+
+evaluator <- function(subset) { 
+  p <- J48(as.simple.formula(subset, "Species"), data=iris) 
+  e <- sum(iris$Species == predict(p))/nrow(iris) 
+  print(subset) 
+  print(e) 
+  return(e)
+} 
+
+# Forward Search
+subset <- forward.search(names(iris)[-5], evaluator)
+
+# Backward Search
+subset <- backward.search(names(iris)[-5], evaluator)
+```
+
