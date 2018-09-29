@@ -1,6 +1,6 @@
 ---
-title: 'Exercício: Nnet'
-subtitle: ITAú Analytics - Machine Learning
+title: 'NNet'
+subtitle: Felipe Lodur
 output:
   pdf_document:
     toc: yes
@@ -8,9 +8,6 @@ output:
     theme: united
     toc: yes
 ---
-
-**Nome:** Felipe Coelho Silva
-**Funcional:** 987301419
 
 ## Perceptron
 
