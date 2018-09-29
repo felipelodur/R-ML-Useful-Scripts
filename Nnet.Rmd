@@ -1,0 +1,373 @@
+---
+title: 'Exercício: Nnet'
+subtitle: ITAú Analytics - Machine Learning
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: united
+    toc: yes
+---
+
+**Nome:** Felipe Coelho Silva
+**Funcional:** 987301419
+
+## Perceptron
+
+Train and Test implementations:
+
+```{r}
+# Adapted from: https://bitbucket.org/rodrigo_mello/ml4u/src/ab2300b432ac9105df1352d5890543cf136bef8f/perceptron/?at=master
+
+# threshold activation function
+f_threshold <- function(u) {
+  if (u >= 0)
+    return (1)
+  return (0)
+}
+
+# Training a perceptron
+perceptron.train <- function(dataset, eta=0.1, epsilon=1e-2) {
+  
+  classId = ncol(dataset)
+  X = dataset[,1:classId-1]
+  Y = dataset[,classId]
+  
+  # initializing weights
+  weights = runif(min=-0.5, max=0.5, n=ncol(dataset))
+  
+  ncycle = 0
+  squaredError = 2*epsilon
+  
+  while (squaredError > epsilon) {
+    squaredError = 0
+    
+    for (i in 1:nrow(X)) {
+      example = c(1,as.numeric(X[i,]))
+      class = Y[i]
+      
+      cat("example = ", as.numeric(X[i,]), "\n")
+      cat("class = ", class, "\n")
+      
+      # computing predicted y
+      u = example %*% weights
+      
+      cat("u = ", u, "\n")
+      
+      y = f_threshold(u)
+      
+      cat("predicted = ", y, "\n")
+      
+      # Error
+      Error = class - y
+      squaredError = squaredError + Error^2
+      
+      if(abs(Error) > 0){
+        # update weights
+        cat("updating weights...\n")
+        delta = eta * Error * example        
+        weights = weights + delta
+      }
+      
+    }
+    
+    squaredError = squaredError / nrow(X)
+    cat("Squared error = ", squaredError, "\n")
+    ncycle = ncycle + 1
+  }
+  
+  ret = list()
+  ret$weights = weights
+  ret$ncycle = ncycle
+  cat("Final weights = ", weights, "\n")
+  cat("Number of cycles = ", ncycle, "\n")
+  
+  return (ret)
+}
+
+# predicting with a perceptron
+perceptron.run <- function(X, model) {
+  
+  cat("#example\tprediction\n")
+  for (i in 1:nrow(X)) {
+    example = c(1,as.numeric(X[i,]))
+    
+    # u
+    u = example %*% model$weights
+    y = f_threshold(u)
+    
+    cat(as.numeric(X[i,]), "\t", y, "\n")
+  }
+}
+
+# testing code with AND dataset
+perceptron.test <- function(eta=0.1, threshold=1e-2) {
+  # creating dataset - can change it to observe different results
+  bit1 <- c(0,0,1,1)
+  bit2 <- c(0,1,0,1)
+  and <- c(0,0,0,1)
+  andData <- data.frame(bit1,bit2,and)
+  
+  cat("dataset:\n")
+  print(andData)
+  
+  # training
+  cat("\n\n>> Training:\n")
+  model = perceptron.train(andData, eta, threshold)
+  
+  # testing
+  cat("\n\n>> Testing:\n")
+  perceptron.run(andData[,1:ncol(andData)-1], model)
+  
+  return(model)
+  
+}
+
+```
+
+```{r}
+# Ploting the hyperplane
+perceptron.plot <- function(model){
+  
+  range = seq(0,1,length=100) # creating between 0 and 1, dividing into 100 intervals
+  matrix = outer(range,range, function(x1,x2){
+    cbind(1,x1,x2) %*% model$weights 
+  })
+  ids = which(matrix>=0)
+  matrix[ids] = 1
+  matrix[-ids] = 0
+  filled.contour(range,range,matrix)  
+}
+
+perceptron.plot(perceptron.test())
+```
+
+## Adaline
+
+```{r}
+adaline.train <- function(dataset, eta=0.1, epsilon=1e-2, niter = 50) {
+  
+  classId = ncol(dataset)
+  X = as.data.frame(dataset[,1:classId-1])
+  Y = dataset[,classId]
+  
+  # initializing weights
+  weights = runif(min=-0.5, max=0.5, n=ncol(dataset))
+  
+  ncycle = 0
+  squaredError = 2*epsilon
+  normalization = sum((Y - mean(Y))^2)
+  
+  while ((squaredError > epsilon)&&(ncycle < niter)) {
+    squaredError = 0
+    
+    for (i in 1:nrow(X)) {
+      example = c(1,as.numeric(X[i,]))
+      label = Y[i]
+      
+      #cat("example = ", as.numeric(X[i,]), "\n")
+      #cat("label = ", label, "\n")
+      
+      # computing predicted y
+      u = example %*% weights
+      
+      #cat("u = ", u, "\n")
+      
+      y = u # linear activation function
+      
+      #cat("predicted = ", y, "\n")
+      
+      # Error
+      Error = label - y
+      squaredError = (squaredError + Error^2) 
+      
+      if(abs(Error) > epsilon){
+        # update weights
+        #cat("updating weights...\n")
+        delta = eta * Error * example        
+        weights = weights + delta
+      }
+      
+    }
+    
+    squaredError = squaredError / (nrow(X) * normalization)
+    cat("Squared error = ", squaredError, "\n")
+    ncycle = ncycle + 1
+  }
+  
+  ret = list()
+  ret$weights = weights
+  ret$ncycle = ncycle
+  ret$error = squaredError
+  cat("Final weights = ", weights, "\n")
+  cat("Number of cycles = ", ncycle, "\n")
+  
+  return (ret)
+}
+
+# predicting with an adaline
+adaline.run <- function(X, model) {
+  
+  cat("#example\tprediction\n")
+  for (i in 1:nrow(X)) {
+    example = c(1,as.numeric(X[i,]))
+    
+    # u
+    u = example %*% model$weights
+    y = u # linear activation function
+    
+    cat(as.numeric(X[i,]), "\t", y, "\n")
+  }
+}
+
+# testing code 
+adaline.test <- function(eta=0.1, threshold=1e-3,niter=100) {
+  
+  # Artificial Dataset
+  set.seed(20)
+  x <- rnorm(100)
+  e <- rnorm(100,0,2)
+  y <- 0.5+2*x+e
+  
+  plot(x,y)
+  data <- cbind(x,y)
+  data <- as.data.frame(data)
+  model <- adaline.train(data,eta,threshold,niter)
+  abline(model$weights[1],model$weights[2])
+}
+```
+
+## Nnet package
+
+```{r}
+library(nnet)
+
+decisionplot <- function(model, data, class = NULL, predict_type = "class",
+                         resolution = 100, showgrid = TRUE, ...) {
+  
+  if(!is.null(class)) cl <- data[,class] else cl <- 1
+  data <- data[,1:2]
+  k <- length(unique(cl))
+  
+  plot(data, col = as.integer(cl)+1L, pch = as.integer(cl)+1L, ...)
+  
+  # make grid
+  r <- sapply(data, range, na.rm = TRUE)
+  xs <- seq(r[1,1], r[2,1], length.out = resolution)
+  ys <- seq(r[1,2], r[2,2], length.out = resolution)
+  g <- cbind(rep(xs, each=resolution), rep(ys, time = resolution))
+  colnames(g) <- colnames(r)
+  g <- as.data.frame(g)
+  
+  ### guess how to get class labels from predict
+  ### (unfortunately not very consistent between models)
+  p <- predict(model, g, type = predict_type)
+  if(is.list(p)) p <- p$class
+  p <- as.factor(p)
+  
+  if(showgrid) points(g, col = as.integer(p)+1L, pch = ".")
+  
+  z <- matrix(as.integer(p), nrow = resolution, byrow = TRUE)
+  contour(xs, ys, z, add = TRUE, drawlabels = FALSE,
+          lwd = 2, levels = (1:(k-1))+.5)
+  
+  invisible(z)
+}
+
+x <- iris[1:150, c("Sepal.Length", "Sepal.Width", "Species")]
+
+model <- nnet(Species ~ ., data=x, size = 1, maxit = 1000, trace = FALSE)
+
+decisionplot(model, x, class = "Species", main = "NN (1)")
+```
+
+
+## Caret and Plyr
+
+```{r}
+library(caret)
+library(plyr)
+
+# normalization function (min-max)
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x))) 
+}
+
+# normalize dataset data1 using min and max from data2
+normalize2 <- function(data1,data2) {
+  for (col in 1:ncol(data1)){
+    data1[,col] <- (data1[,col] - min(data2[,col]))/(max(data2[,col]-min(data2[,col])))
+  }
+  return (data1)
+}
+
+# dividing into 10 folds
+nFolds  = 10
+set.seed(100)
+folds <- createFolds(iris$Species, k = nFolds, list = FALSE)
+
+# mean and standard deviation of accuracy
+sum = 0
+sumSQ = 0
+
+for (fold in 1:nFolds){
+  
+  # making training/test fold
+  train <- iris[folds!=fold,]
+  test <- iris[folds == fold,]
+  
+  # separating validation data
+  trainingRowIndex <- createDataPartition(train$Species, p = 0.7, list = FALSE)#sample(1:nrow(train), 0.7*nrow(train))  # row indices for training data
+  trainingData <- train[trainingRowIndex, ]  # model training data
+  validation  <- train[-trainingRowIndex, ] 
+  
+  # normalizing training/validation
+  train_norm <- as.data.frame(lapply(trainingData[1:4], normalize))
+  validation_norm <- normalize2(validation[,1:4],trainingData[,1:4]) 
+  
+  x <- cbind(train_norm,trainingData$Species)
+  names(x)[5]<-paste("Species")
+  
+  # training kNN with different values of k and choosing one specific k
+  max_ac = 0
+  k_max_ac = 1
+  for (k in c(1,3,5)){
+    model <-nnet(Species ~ ., data=x, size = k, maxit = 1000, trace = FALSE);
+    res <- as.factor(max.col(predict(model,validation_norm)))
+    res <- revalue(res, c("1"="setosa","2"="versicolor","3"="virginica"),warn_missing=F)
+    conf <- table(validation$Species,res)
+    
+    ac = sum(diag(conf))/sum(conf) # accuracy
+    #cat("fold ",fold,", neurons =",k,", accuracy = ",ac,"\n")
+    
+    if(ac > max_ac){
+      max_ac = ac
+      k_max_ac = k
+      
+    }
+    
+  }
+  cat("Fold ",fold,": number of neurons = ",k_max_ac)
+  # now normalizing training-test fold
+  trainN <- as.data.frame(lapply(as.data.frame(train[,1:4]), normalize))
+  testN <- normalize2(as.data.frame(test[,1:4]),as.data.frame(train[,1:4])) 
+  
+  x <- cbind(trainN,train$Species)
+  names(x)[5]<-paste("Species")
+  model <-nnet(Species ~ ., data=x, size = k_max_ac, maxit = 1000, trace = FALSE);
+  res2 <- as.factor(max.col(predict(model,testN)))
+  res2 <- revalue(res2, c("1"="setosa","2"="versicolor","3"="virginica"),warn_missing=F)
+  conf2 <- table(test$Species,res2)
+  ac = sum(diag(conf2))/sum(conf2) # accuracy
+  cat(", accuracy = ",ac,"\n")
+  sum = sum + ac
+  sumSQ = sumSQ + (ac*ac)
+}
+
+# computing average and standard deviation of performance
+mean = sum/nFolds
+std = sqrt((sumSQ/nFolds) - (mean*mean))
+cat("Mean accuracy = ",mean," std = ",std)
+```
+
+
