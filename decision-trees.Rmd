@@ -1,0 +1,190 @@
+---
+title: 'Decision Trees'
+subtitle: Felipe Lodur
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: united
+    toc: yes
+---
+
+## Simple Tree
+
+```{r}
+library(rpart)
+library(caret)
+
+# separating training and test sets
+train.indices <- createDataPartition(iris$Species, p = 0.7, list = FALSE)
+iris.train <- iris[train.indices, ]
+iris.test <- iris[-train.indices, ]
+
+fit <- rpart(Species ~ ., data=iris.train, method="class")
+par(xpd = TRUE)
+plot(fit,compress=TRUE,uniform=TRUE, main="Classification Tree for Iris")
+text(fit, use.n=TRUE, all=TRUE, cex=.8)
+
+prediction <- predict(fit, iris.test, type = "class")
+table(iris.test$Species,prediction)
+```
+
+
+## Rpart
+
+```{r}
+library(caret)
+library(rpart)
+
+# define training control
+train_control<- trainControl(method="cv", number=10)
+
+# train the model
+model<- train(Species~., data=iris, trControl=train_control, method="rpart")
+print(model)
+
+# Prediction Probabilities.
+prob <- predict(object=fit, newdata=iris.test, type="prob")
+prob
+
+# looking at parameters 
+?rpart.control
+```
+
+Applying Pruning
+
+```{r}
+# Removing pruning, for instance
+fit <- rpart(Species ~ ., data=iris.train, method="class",control = rpart.control(minbucket = 1,cp=0))
+par(xpd = TRUE)
+plot(fit,compress=TRUE,uniform=TRUE, main="Classification Tree for Iris (without pruning)")
+text(fit, use.n=TRUE, all=TRUE, cex=.8)
+prediction <- predict(fit, iris.test, type = "class")
+table(iris.test$Species,prediction)
+```
+
+For Regression
+
+```{r}
+# for regression
+iris_reg.train <- iris.train[-ncol(iris)] # removing last collumn
+iris_reg.test <- iris.test[-ncol(iris)] # removing last collumn
+fit <- rpart(Petal.Width ~ ., data=iris_reg.train)
+print(fit)
+par(xpd = TRUE)
+plot(fit,compress=TRUE,uniform=TRUE, main="Regression Tree for Iris (Petal Width)")
+text(fit, use.n=TRUE, all=TRUE, cex=.8)
+
+p <- predict(object=fit, newdata=iris_reg.test)
+
+# NMSE
+sum((p-iris_reg.test$Petal.Width)^2)/sum((iris_reg.test$Petal.Width - mean(iris_reg.test$Petal.Width))^2)
+head(cbind(p,iris_reg.test$Petal.Width)) # just visualizing
+```
+
+## C5.0
+
+```{r}
+library(C50)
+library(printr)
+
+model <- C5.0(Species ~., data=iris.train,trials=1)
+summary(model)
+plot(model)
+
+results <- predict(object=model, newdata=iris.test, type="class")
+table(iris.test$Species,results)
+
+# probabilities
+prob <- predict(object=model, newdata=iris.test, type="prob")
+prob
+
+# extracting rules
+model <- C5.0(Species ~., data=iris.train,trials=1,rules=TRUE)
+summary(model)
+results <- predict(object=model, newdata=iris.test, type="class")
+table(iris.test$Species,results)
+```
+
+## Frontiers
+
+Some examples
+
+```{r}
+decisionplot <- function(model, data, class = NULL, predict_type = "class",
+  resolution = 100, showgrid = TRUE, ...) {
+
+  if(!is.null(class)) cl <- data[,class] else cl <- 1
+  data <- data[,1:2]
+  k <- length(unique(cl))
+
+  plot(data, col = as.integer(cl)+1L, pch = as.integer(cl)+1L, ...)
+
+  # make grid
+  r <- sapply(data, range, na.rm = TRUE)
+  xs <- seq(r[1,1], r[2,1], length.out = resolution)
+  ys <- seq(r[1,2], r[2,2], length.out = resolution)
+  g <- cbind(rep(xs, each=resolution), rep(ys, time = resolution))
+  colnames(g) <- colnames(r)
+  g <- as.data.frame(g)
+
+  ### guess how to get class labels from predict
+  ### (unfortunately not very consistent between models)
+  p <- predict(model, g, type = predict_type)
+  if(is.list(p)) p <- p$class
+  p <- as.factor(p)
+
+  if(showgrid) points(g, col = as.integer(p)+1L, pch = ".")
+
+  z <- matrix(as.integer(p), nrow = resolution, byrow = TRUE)
+  contour(xs, ys, z, add = TRUE, drawlabels = FALSE,
+    lwd = 2, levels = (1:(k-1))+.5)
+
+  invisible(z)
+}
+
+library("rpart")
+
+x <- iris[1:150, c("Sepal.Length", "Sepal.Width", "Species")]
+model <- rpart(Species ~ ., data=x)
+decisionplot(model, x, class = "Species", main = "CART")
+```
+
+With overfitting:
+
+```{r}
+# overfitting (pruning criteria)
+model <- rpart(Species ~ ., data=x,
+  control = rpart.control(cp = 0, minsplit = 1))
+decisionplot(model, x, class = "Species", main = "CART (overfitting)")
+```
+
+```{r}
+library(C50)
+model <- C5.0(Species ~ ., data=x)
+decisionplot(model, x, class = "Species", main = "C5.0")
+```
+
+```{r}
+set.seed(1000)
+
+library(mlbench)
+x <- mlbench.circle(100)
+x <- cbind(as.data.frame(x$x), factor(x$classes))
+colnames(x) <- c("x", "y", "class")
+
+library("rpart")
+model <- rpart(class ~ ., data=x)
+decisionplot(model, x, class = "class", main = "CART")
+```
+
+```{r}
+# with overfitting
+model <- rpart(class ~ ., data=x,
+  control = rpart.control(cp = 0, minsplit = 1))
+decisionplot(model, x, class = "class", main = "CART (overfitting)")
+
+library(C50)
+model <- C5.0(class ~ ., data=x)
+decisionplot(model, x, class = "class", main = "C5.0")
+```
